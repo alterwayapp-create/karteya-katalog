@@ -5,7 +5,14 @@ Bu site https://alterwayapp-create.github.io/karteya-katalog/ adresinde yayınla
 ## Kataloğu güncellemek
 
 1. Yeni kataloğun PDF dosyasının adını **katalog.pdf** yapın (küçük harf).
-2. Bu depoda **Add file → Upload files** ile katalog.pdf dosyasını yükleyin. Eski dosya varsa üzerine yazılır.
-3. **Commit changes** deyin. 1-2 dakika içinde site yeni kataloğu gösterir.
+2. Bu depoda **Add file → Upload files** ile katalog.pdf dosyasını yükleyin. Eski dosya üzerine yazılır.
+3. **Commit changes** deyin.
 
-Başka hiçbir dosyaya dokunmanız gerekmez.
+Yükleme sonrası sistem sayfaları kendiliğinden resme çevirir (`pages/` klasörü ve `pages.json`, "Actions" sekmesinden izlenebilir) ve site 2-3 dakika içinde yeni kataloğu gösterir. Başka hiçbir dosyaya dokunmanız gerekmez.
+
+## Dosyalar
+
+- `katalog.pdf` – yayındaki katalog (PDF indir düğmesi bunu verir)
+- `pages/`, `pages.json` – otomatik üretilen sayfa görselleri (elle düzenlemeyin)
+- `index.html`, `lib/` – görüntüleyici
+- `tools/render_pages.py`, `.github/workflows/render.yml` – otomatik dönüştürme

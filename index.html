@@ -27,7 +27,7 @@ header{position:sticky;top:0;z-index:10;background:var(--surface);border-bottom:
 .goldline{height:3px;background:linear-gradient(90deg,var(--gold),#e9d59a 50%,var(--gold))}
 main{max-width:760px;margin:0 auto;padding:16px 12px 48px;display:flex;flex-direction:column;gap:18px}
 .page{margin:0;background:var(--surface);box-shadow:var(--shadow);border-radius:4px;overflow:hidden;position:relative}
-.page canvas{display:block;width:100%;height:auto;background:#fff}
+.page canvas,.page img{display:block;width:100%;height:auto;background:#fff}
 figcaption{position:absolute;right:10px;bottom:10px;font-size:11.5px;font-variant-numeric:tabular-nums;font-weight:600;color:#fff;background:rgba(26,29,33,.65);padding:3px 8px;border-radius:999px}
 .msg{text-align:center;color:var(--muted);padding:64px 16px;font-weight:600}
 .msg strong{display:block;color:var(--ink);font-size:18px;margin-bottom:8px}
@@ -52,30 +52,37 @@ figcaption{position:absolute;right:10px;bottom:10px;font-size:11.5px;font-varian
   var main=document.getElementById('main'),msg=document.getElementById('msg'),cur=document.getElementById('cur'),total=document.getElementById('total'),counter=document.getElementById('counter'),dl=document.getElementById('dl'),top=document.getElementById('top');
   window.addEventListener('scroll',function(){top.classList.toggle('show',window.scrollY>800)},{passive:true});
   top.addEventListener('click',function(){window.scrollTo({top:0,behavior:'smooth'})});
+  var v='?v='+Math.floor(Date.now()/600000); // 10-minute cache key
   function fail(t){msg.innerHTML='<strong>Katalog henüz yayında değil</strong>'+t;}
-  if(!window.pdfjsLib){fail('Görüntüleyici yüklenemedi.');return;}
-  pdfjsLib.GlobalWorkerOptions.workerSrc='lib/pdf.worker.min.js';
-  var url='katalog.pdf?v='+Date.now();
-  pdfjsLib.getDocument({url:url}).promise.then(function(pdf){
-    msg.remove();counter.hidden=false;dl.hidden=false;total.textContent=pdf.numPages;
-    var dpr=Math.min(window.devicePixelRatio||1,2);
-    var figs=[];
-    pdf.getPage(1).then(function(p1){
-      var vp=p1.getViewport({scale:1});var ratio=vp.height/vp.width;
-      for(var i=1;i<=pdf.numPages;i++){
-        var fig=document.createElement('figure');fig.className='page';fig.dataset.n=i;fig.id='p'+i;
-        var c=document.createElement('canvas');c.style.aspectRatio=vp.width+' / '+vp.height;
-        var cap=document.createElement('figcaption');cap.textContent=i+' / '+pdf.numPages;
-        fig.appendChild(c);fig.appendChild(cap);main.appendChild(fig);figs.push(fig);
-      }
-      var rendered={};
-      function render(fig){var n=+fig.dataset.n;if(rendered[n])return;rendered[n]=true;
-        pdf.getPage(n).then(function(page){var c=fig.querySelector('canvas');var w=fig.clientWidth||600;var scale=(w*dpr)/page.getViewport({scale:1}).width;var v=page.getViewport({scale:scale});c.width=v.width;c.height=v.height;page.render({canvasContext:c.getContext('2d'),viewport:v});});}
-      var io=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting)render(e.target)})},{rootMargin:'150% 0px'});
-      var io2=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting)cur.textContent=e.target.dataset.n})},{rootMargin:'-45% 0px -45% 0px'});
-      figs.forEach(function(f){io.observe(f);io2.observe(f)});
-    });
-  }).catch(function(e){fail('Katalog dosyası (katalog.pdf) bulunamadı. Lütfen daha sonra tekrar deneyin.');});
+  function ready(n){msg.remove();counter.hidden=false;dl.hidden=false;total.textContent=n;
+    var io2=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting)cur.textContent=e.target.dataset.n})},{rootMargin:'-45% 0px -45% 0px'});
+    [].forEach.call(document.querySelectorAll('.page'),function(f){io2.observe(f)});}
+  function fig(i,n){var f=document.createElement('figure');f.className='page';f.dataset.n=i;f.id='p'+i;
+    var cap=document.createElement('figcaption');cap.textContent=i+' / '+n;return {fig:f,cap:cap};}
+  // Mode 1: pre-rendered images (fast on phones). Produced automatically from katalog.pdf.
+  function images(meta){
+    for(var i=1;i<=meta.count;i++){var o=fig(i,meta.count);var img=document.createElement('img');
+      img.src='pages/'+meta.files[i-1]+v;img.alt='Katalog sayfa '+i;img.loading=i<3?'eager':'lazy';img.decoding='async';img.width=meta.width;img.height=meta.height;
+      o.fig.appendChild(img);o.fig.appendChild(o.cap);main.appendChild(o.fig);}
+    ready(meta.count);}
+  // Mode 2: draw the PDF itself (used until the images have been generated).
+  function pdf(){
+    if(!window.pdfjsLib){fail('Görüntüleyici yüklenemedi.');return;}
+    pdfjsLib.GlobalWorkerOptions.workerSrc='lib/pdf.worker.min.js';
+    pdfjsLib.getDocument({url:'katalog.pdf'+v}).promise.then(function(doc){
+      var dpr=Math.min(window.devicePixelRatio||1,2),figs=[];
+      doc.getPage(1).then(function(p1){var vp=p1.getViewport({scale:1});
+        for(var i=1;i<=doc.numPages;i++){var o=fig(i,doc.numPages);var c=document.createElement('canvas');c.style.aspectRatio=vp.width+' / '+vp.height;
+          o.fig.appendChild(c);o.fig.appendChild(o.cap);main.appendChild(o.fig);figs.push(o.fig);}
+        var done={};function render(f){var n=+f.dataset.n;if(done[n])return;done[n]=true;
+          doc.getPage(n).then(function(page){var c=f.querySelector('canvas');var w=f.clientWidth||600;var s=(w*dpr)/page.getViewport({scale:1}).width;var vw=page.getViewport({scale:s});c.width=vw.width;c.height=vw.height;page.render({canvasContext:c.getContext('2d'),viewport:vw});});}
+        var io=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting)render(e.target)})},{rootMargin:'150% 0px'});
+        figs.forEach(function(f){io.observe(f)});ready(doc.numPages);});
+    }).catch(function(){fail('Katalog dosyası (katalog.pdf) bulunamadı. Lütfen daha sonra tekrar deneyin.');});}
+  // Use the images only if they were rendered from the katalog.pdf that is online right now.
+  Promise.all([fetch('pages.json'+v).then(function(r){if(!r.ok)throw 0;return r.json()}),
+               fetch('katalog.pdf'+v,{method:'HEAD'}).then(function(r){return r.ok?+r.headers.get('content-length'):-1})])
+    .then(function(a){var m=a[0],size=a[1];if(m&&m.count>0&&(!m.pdf_size||size<=0||m.pdf_size===size))images(m);else pdf();}).catch(pdf);
 })();
 </script>
 </body>
